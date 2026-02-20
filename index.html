@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KMB Real-Time Bus Arrival · 九龍巴士實時到站</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+            background: #f5f0eb;
+            color: #2d2d2d;
+            min-height: 100vh;
+        }
+
+        /* ─── Header ─── */
+        .header {
+            background: linear-gradient(135deg, #d42e12 0%, #a01d0a 100%);
+            color: white;
+            padding: 28px 20px 24px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -40px; right: -40px;
+            width: 180px; height: 180px;
+            background: rgba(255,255,255,0.07);
+            border-radius: 50%;
+        }
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: -60px; left: -30px;
+            width: 220px; height: 220px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 50%;
+        }
+        .header-brand {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+        .header-icon { font-size: 2.4em; }
+        .header-title {
+            font-size: 2.2em;
+            font-weight: 900;
+            letter-spacing: 5px;
+        }
+        .header-sub {
+            font-size: 1em;
+            opacity: 0.88;
+            margin-top: 6px;
+            letter-spacing: 0.5px;
+        }
+        .header-tag {
+            font-size: 0.78em;
+            opacity: 0.65;
+            margin-top: 3px;
+            letter-spacing: 0.8px;
+        }
+
+        /* ─── Layout ─── */
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 20px 14px 60px;
+        }
+
+        /* ─── Cards ─── */
+        .card {
+            background: white;
+            border-radius: 18px;
+            padding: 22px 20px;
+            margin-bottom: 14px;
+            box-shadow: 0 2px 14px rgba(0,0,0,0.07);
+        }
+
+        /* ─── Search ─── */
+        .search-label {
+            font-weight: 700;
+            font-size: 0.95em;
+            color: #555;
+            margin-bottom: 12px;
+            letter-spacing: 0.3px;
+        }
+        .search-box {
+            display: flex;
+            gap: 10px;
+        }
+        .route-input {
+            flex: 1;
+            padding: 13px 16px;
+            font-size: 1.05em;
+            border: 2px solid #e8dfd8;
+            border-radius: 11px;
+            outline: none;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #222;
+            background: #fdfbf9;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .route-input:focus {
+            border-color: #d42e12;
+            box-shadow: 0 0 0 4px rgba(212,46,18,0.1);
+        }
+        .route-input::placeholder {
+            text-transform: none;
+            color: #c0b8b0;
+            letter-spacing: 0;
+            font-size: 0.95em;
+        }
+        .search-btn {
+            background: #d42e12;
+            color: white;
+            border: none;
+            padding: 13px 22px;
+            border-radius: 11px;
+            font-weight: 700;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
+            white-space: nowrap;
+        }
+        .search-btn:hover {
+            background: #b52610;
+            box-shadow: 0 4px 14px rgba(212,46,18,0.35);
+        }
+        .search-btn:active { transform: scale(0.97); }
+
+        /* Quick-access chips */
+        .chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-top: 14px;
+        }
+        .chip-label {
+            font-size: 0.75em;
+            color: #bbb;
+            display: flex;
+            align-items: center;
+            margin-right: 2px;
+        }
+        .chip {
+            background: #fff5f3;
+            border: 1.5px solid #fdd5cc;
+            color: #c84030;
+            padding: 4px 11px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .chip:hover {
+            background: #d42e12;
+            color: white;
+            border-color: #d42e12;
+        }
+
+        /* ─── Spinner & States ─── */
+        .loading-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 22px;
+            color: #aaa;
+            font-size: 0.9em;
+        }
+        .spinner {
+            width: 20px; height: 20px;
+            border: 3px solid #f0ccc8;
+            border-top-color: #d42e12;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .error-state {
+            background: #fff5f3;
+            border: 1.5px solid #fdd5cc;
+            border-radius: 11px;
+            padding: 16px;
+            color: #c04030;
+            text-align: center;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        /* ─── Route Card ─── */
+        .route-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .route-badge {
+            background: #d42e12;
+            color: white;
+            font-size: 1.55em;
+            font-weight: 900;
+            padding: 10px 14px;
+            border-radius: 11px;
+            min-width: 72px;
+            text-align: center;
+            letter-spacing: 1px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .route-detail { flex: 1; min-width: 0; }
+        .route-od-en {
+            font-size: 1em;
+            font-weight: 700;
+            color: #2d2d2d;
+            line-height: 1.4;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .route-od-tc {
+            font-size: 0.85em;
+            color: #aaa;
+            margin-top: 3px;
+        }
+        .arr { color: #d42e12; margin: 0 4px; }
+
+        /* Direction tabs */
+        .dir-tabs {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .dir-tab {
+            flex: 1;
+            padding: 10px 12px;
+            border: 2px solid #e8dfd8;
+            border-radius: 11px;
+            cursor: pointer;
+            background: #fafaf9;
+            transition: all 0.18s;
+        }
+        .dir-tab-label {
+            font-size: 0.72em;
+            color: #bbb;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+        .dir-tab-dest-en {
+            font-size: 0.9em;
+            font-weight: 700;
+            color: #555;
+            margin-top: 3px;
+        }
+        .dir-tab-dest-tc {
+            font-size: 0.78em;
+            color: #ccc;
+        }
+        .dir-tab.active {
+            border-color: #d42e12;
+            background: #fff5f3;
+        }
+        .dir-tab.active .dir-tab-label { color: #d42e12; }
+        .dir-tab.active .dir-tab-dest-en { color: #d42e12; }
+        .dir-tab:hover:not(.active) {
+            border-color: #d42e12;
+            background: #fffbfa;
+        }
+
+        /* ─── Stop List ─── */
+        .sec-title {
+            font-size: 0.75em;
+            font-weight: 700;
+            color: #bbb;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            margin-bottom: 12px;
+        }
+        .stop-list {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .stop-list::-webkit-scrollbar { width: 4px; }
+        .stop-list::-webkit-scrollbar-track { background: #f5f0eb; border-radius: 4px; }
+        .stop-list::-webkit-scrollbar-thumb { background: #fdd5cc; border-radius: 4px; }
+        .stop-row {
+            display: flex;
+            align-items: center;
+            padding: 11px 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            background: #fafaf9;
+            transition: all 0.15s;
+        }
+        .stop-row:hover {
+            background: #fff5f3;
+            border-color: #fdd5cc;
+        }
+        .stop-row.active {
+            background: #fff5f3;
+            border-color: #d42e12;
+        }
+        .stop-seq {
+            width: 26px; height: 26px;
+            background: #d42e12;
+            color: white;
+            border-radius: 50%;
+            font-size: 0.7em;
+            font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            margin-right: 11px;
+        }
+        .stop-row.active .stop-seq { background: #d42e12; }
+        .stop-info { flex: 1; min-width: 0; }
+        .stop-en {
+            font-size: 0.9em;
+            font-weight: 600;
+            color: #333;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .stop-tc { font-size: 0.8em; color: #bbb; }
+        .stop-chev { color: #d42e12; font-size: 1.2em; margin-left: 6px; }
+
+        /* ─── ETA Card ─── */
+        .eta-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        .eta-stop-en {
+            font-size: 1.05em;
+            font-weight: 700;
+            color: #2d2d2d;
+        }
+        .eta-stop-tc { font-size: 0.85em; color: #bbb; margin-top: 3px; }
+        .refresh-btn {
+            background: #fff5f3;
+            border: 1.5px solid #fdd5cc;
+            color: #d42e12;
+            padding: 7px 13px;
+            border-radius: 9px;
+            font-size: 0.78em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.18s;
+            white-space: nowrap;
+            flex-shrink: 0;
+            margin-left: 10px;
+        }
+        .refresh-btn:hover { background: #d42e12; color: white; }
+
+        .eta-live-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #f0fff4;
+            border: 1px solid #b2efc8;
+            color: #229944;
+            font-size: 0.72em;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 20px;
+            margin-bottom: 14px;
+            letter-spacing: 0.3px;
+        }
+        .live-dot {
+            width: 7px; height: 7px;
+            background: #22aa44;
+            border-radius: 50%;
+            animation: pulse 1.4s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.3); }
+        }
+
+        .eta-list { display: flex; flex-direction: column; gap: 8px; }
+        .eta-row {
+            display: flex;
+            align-items: center;
+            padding: 14px 16px;
+            border-radius: 11px;
+            background: #fafaf9;
+            border-left: 4px solid transparent;
+        }
+        .eta-row.r1 { border-left-color: #d42e12; background: #fff8f7; }
+        .eta-row.r2 { border-left-color: #f08060; }
+        .eta-row.r3 { border-left-color: #fdd5cc; }
+
+        .eta-rank {
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700;
+            font-size: 0.8em;
+            margin-right: 14px;
+            flex-shrink: 0;
+        }
+        .eta-rank.r1 { background: #d42e12; color: white; }
+        .eta-rank.r2 { background: #f08060; color: white; }
+        .eta-rank.r3 { background: #fdd5cc; color: #c04030; }
+
+        .eta-mid { flex: 1; }
+        .eta-time { font-size: 1.15em; font-weight: 700; color: #2d2d2d; }
+        .eta-remark { font-size: 0.78em; color: #bbb; margin-top: 2px; }
+        .eta-countdown {
+            font-size: 1.08em;
+            font-weight: 800;
+            min-width: 68px;
+            text-align: right;
+        }
+        .eta-countdown.arriving { color: #22aa44; }
+        .eta-countdown.soon { color: #f06020; }
+        .eta-countdown.normal { color: #d42e12; }
+
+        .no-service {
+            text-align: center;
+            padding: 28px 16px;
+            color: #ccc;
+            font-size: 0.9em;
+            line-height: 1.7;
+        }
+        .no-service .icon { font-size: 2.2em; margin-bottom: 8px; }
+        .eta-footer {
+            text-align: center;
+            font-size: 0.75em;
+            color: #ccc;
+            margin-top: 12px;
+        }
+
+        /* ─── Welcome Card ─── */
+        .welcome-desc {
+            font-size: 0.88em;
+            color: #777;
+            line-height: 1.65;
+            margin-bottom: 14px;
+        }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .stat-box {
+            background: #fff5f3;
+            border-radius: 11px;
+            padding: 13px 8px;
+            text-align: center;
+        }
+        .stat-val {
+            font-size: 1.35em;
+            font-weight: 800;
+            color: #d42e12;
+        }
+        .stat-lbl {
+            font-size: 0.73em;
+            color: #bbb;
+            margin-top: 3px;
+        }
+
+        .how-to {
+            background: #fafaf9;
+            border-radius: 11px;
+            padding: 14px 16px;
+            margin-top: 14px;
+        }
+        .how-to-title {
+            font-size: 0.78em;
+            font-weight: 700;
+            color: #d42e12;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 9px;
+        }
+        .step {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 7px;
+            font-size: 0.85em;
+            color: #666;
+        }
+        .step:last-child { margin-bottom: 0; }
+        .step-num {
+            width: 20px; height: 20px;
+            background: #d42e12;
+            color: white;
+            border-radius: 50%;
+            font-size: 0.72em;
+            font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        /* ─── Utility ─── */
+        .hidden { display: none; }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #ccc;
+            font-size: 0.78em;
+            line-height: 1.7;
+        }
+
+        /* ─── Responsive ─── */
+        @media (max-width: 480px) {
+            .header-title { font-size: 1.8em; }
+            .search-box { flex-direction: column; }
+            .route-od-en { font-size: 0.93em; }
+            .stat-val { font-size: 1.2em; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+    <div class="header-brand">
+        <span class="header-icon">🚌</span>
+        <span class="header-title">KMB</span>
+    </div>
+    <div class="header-sub">Kowloon Motor Bus &nbsp;·&nbsp; 九龍巴士</div>
+    <div class="header-tag">Real-Time Bus Arrival Information &nbsp;·&nbsp; 實時到站資訊</div>
+</header>
+
+<div class="container">
+
+    <!-- Search Card -->
+    <div class="card">
+        <div class="search-label">🔍 Enter Bus Route Number &nbsp;·&nbsp; 輸入路線號碼</div>
+        <div class="search-box">
+            <input
+                type="text"
+                id="routeInput"
+                class="route-input"
+                placeholder="e.g. 1, 2A, 98C, N271, S64P …"
+                maxlength="6"
+                autocomplete="off"
+                autocorrect="off"
+                spellcheck="false"
+                onkeydown="if(event.key==='Enter') searchRoute()"
+            />
+            <button class="search-btn" onclick="searchRoute()">Search 搜尋</button>
+        </div>
+        <div class="chip-row">
+            <span class="chip-label">Try:</span>
+            <span class="chip" onclick="quickSearch('1')">1</span>
+            <span class="chip" onclick="quickSearch('2')">2</span>
+            <span class="chip" onclick="quickSearch('6')">6</span>
+            <span class="chip" onclick="quickSearch('11')">11</span>
+            <span class="chip" onclick="quickSearch('36A')">36A</span>
+            <span class="chip" onclick="quickSearch('98C')">98C</span>
+            <span class="chip" onclick="quickSearch('N271')">N271</span>
+            <span class="chip" onclick="quickSearch('219X')">219X</span>
+        </div>
+    </div>
+
+    <!-- Welcome Info Card -->
+    <div class="card" id="welcomeCard">
+        <div class="sec-title">About KMB · 關於九龍巴士</div>
+        <p class="welcome-desc">
+            Kowloon Motor Bus (KMB) is one of Hong Kong's major franchised bus operators, serving
+            Kowloon, the New Territories, and cross-harbour routes since 1933. With over 4,000 buses
+            across more than 400 routes, KMB is a cornerstone of Hong Kong's public transport network.
+        </p>
+        <div class="stat-grid">
+            <div class="stat-box">
+                <div class="stat-val">400+</div>
+                <div class="stat-lbl">Routes 路線</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val">4,000+</div>
+                <div class="stat-lbl">Buses 巴士</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val">1933</div>
+                <div class="stat-lbl">Founded 成立</div>
+            </div>
+        </div>
+        <div class="how-to">
+            <div class="how-to-title">How to Use · 使用方法</div>
+            <div class="step"><div class="step-num">1</div><span>Type a KMB route number in the search box above.</span></div>
+            <div class="step"><div class="step-num">2</div><span>Choose a travel direction — outbound or inbound.</span></div>
+            <div class="step"><div class="step-num">3</div><span>Select a bus stop from the list to view live arrivals.</span></div>
+        </div>
+    </div>
+
+    <!-- Route Info Card -->
+    <div class="card hidden" id="routeCard">
+        <div id="routeCardContent"></div>
+        <div id="dirTabsContainer"></div>
+    </div>
+
+    <!-- Stops Card -->
+    <div class="card hidden" id="stopsCard">
+        <div class="sec-title">🚏 Select a Bus Stop · 選擇巴士站</div>
+        <div id="stopsListContainer"></div>
+    </div>
+
+    <!-- ETA Card -->
+    <div class="card hidden" id="etaCard">
+        <div class="eta-top">
+            <div>
+                <div class="eta-stop-en" id="etaStopEn"></div>
+                <div class="eta-stop-tc" id="etaStopTc"></div>
+            </div>
+            <button class="refresh-btn" onclick="refreshETA()">🔄 Refresh</button>
+        </div>
+        <div class="eta-live-badge">
+            <span class="live-dot"></span> LIVE &nbsp;·&nbsp; 實時資料
+        </div>
+        <div class="eta-list" id="etaList"></div>
+        <div class="eta-footer" id="etaFooter"></div>
+    </div>
+
+</div>
+
+<footer>
+    Real-time data provided by KMB Open Data API &nbsp;·&nbsp; 實時資料由九龍巴士公開數據 API 提供<br>
+    Data may be delayed up to a few minutes &nbsp;·&nbsp; 資料可能稍有延遲 &nbsp;·&nbsp; © 2025 KMB Bus Tracker
+</footer>
+
+<script>
+    const API = 'https://data.etabus.gov.hk/v1/transport/kmb';
+
+    const state = {
+        route: '',
+        routeData: [],
+        bound: 'O',
+        serviceType: '1',
+        stops: [],
+        stopInfos: [],
+        selectedIdx: -1,
+        etaTimer: null
+    };
+
+    /* ─── Helpers ─── */
+    const $ = id => document.getElementById(id);
+    const show = id => $(id).classList.remove('hidden');
+    const hide = id => $(id).classList.add('hidden');
+
+    async function fetchJSON(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+    }
+
+    function clearTimer() {
+        if (state.etaTimer) { clearInterval(state.etaTimer); state.etaTimer = null; }
+    }
+
+    function quickSearch(r) {
+        $('routeInput').value = r;
+        searchRoute();
+    }
+
+    /* ─── Search Route ─── */
+    async function searchRoute() {
+        const input = $('routeInput').value.trim().toUpperCase();
+        if (!input) return;
+
+        clearTimer();
+        state.route = input;
+        state.selectedIdx = -1;
+
+        hide('welcomeCard');
+        hide('stopsCard');
+        hide('etaCard');
+        show('routeCard');
+
+        $('routeCardContent').innerHTML = `
+            <div class="loading-state">
+                <div class="spinner"></div>
+                Searching for route <strong>${input}</strong>…
+            </div>`;
+        $('dirTabsContainer').innerHTML = '';
+
+        try {
+            const data = await fetchJSON(`${API}/route/`);
+            const routes = data.data.filter(r => r.route === input);
+
+            if (!routes.length) {
+                $('routeCardContent').innerHTML = `
+                    <div class="error-state">
+                        ❌ Route <strong>${input}</strong> was not found.<br>
+                        Please check the number and try again.
+                    </div>`;
+                return;
+            }
+
+            state.routeData = routes;
+            const ob = routes.find(r => r.bound === 'O');
+            const ib = routes.find(r => r.bound === 'I');
+            const primary = ob || routes[0];
+
+            state.bound = ob ? 'O' : 'I';
+            state.serviceType = primary.service_type;
+
+            $('routeCardContent').innerHTML = `
+                <div class="route-header">
+                    <div class="route-badge">${input}</div>
+                    <div class="route-detail">
+                        <div class="route-od-en">
+                            ${primary.orig_en}<span class="arr">→</span>${primary.dest_en}
+                        </div>
+                        <div class="route-od-tc">
+                            ${primary.orig_tc} → ${primary.dest_tc}
+                        </div>
+                    </div>
+                </div>`;
+
+            let tabs = '<div class="dir-tabs">';
+            if (ob) tabs += `
+                <div class="dir-tab ${state.bound === 'O' ? 'active' : ''}"
+                     onclick="selectDir('O','${ob.service_type}',this)">
+                    <div class="dir-tab-label">▶ Outbound 往</div>
+                    <div class="dir-tab-dest-en">${ob.dest_en}</div>
+                    <div class="dir-tab-dest-tc">${ob.dest_tc}</div>
+                </div>`;
+            if (ib) tabs += `
+                <div class="dir-tab ${state.bound === 'I' ? 'active' : ''}"
+                     onclick="selectDir('I','${ib.service_type}',this)">
+                    <div class="dir-tab-label">◀ Inbound 往</div>
+                    <div class="dir-tab-dest-en">${ib.dest_en}</div>
+                    <div class="dir-tab-dest-tc">${ib.dest_tc}</div>
+                </div>`;
+            tabs += '</div>';
+            $('dirTabsContainer').innerHTML = tabs;
+
+            await loadStops();
+
+        } catch (err) {
+            $('routeCardContent').innerHTML = `
+                <div class="error-state">
+                    ❌ Could not fetch route data. Please check your connection and try again.
+                </div>`;
+        }
+    }
+
+    /* ─── Direction ─── */
+    async function selectDir(bound, serviceType, el) {
+        state.bound = bound;
+        state.serviceType = serviceType;
+        state.selectedIdx = -1;
+        clearTimer();
+        hide('etaCard');
+        document.querySelectorAll('.dir-tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        await loadStops();
+    }
+
+    /* ─── Load Stops ─── */
+    async function loadStops() {
+        show('stopsCard');
+        hide('etaCard');
+        $('stopsListContainer').innerHTML = `
+            <div class="loading-state"><div class="spinner"></div>Loading bus stops…</div>`;
+
+        try {
+            const dir = state.bound === 'O' ? 'outbound' : 'inbound';
+            const raw = await fetchJSON(`${API}/route-stop/${state.route}/${dir}/${state.serviceType}`);
+
+            if (!raw.data || !raw.data.length) {
+                $('stopsListContainer').innerHTML =
+                    `<div class="error-state">No stops found for this direction.</div>`;
+                return;
+            }
+
+            state.stops = raw.data;
+
+            // Parallel fetch of stop info
+            const infos = await Promise.all(
+                state.stops.map(s => fetchJSON(`${API}/stop/${s.stop}`))
+            );
+            state.stopInfos = infos;
+
+            renderStops();
+
+        } catch (err) {
+            $('stopsListContainer').innerHTML =
+                `<div class="error-state">❌ Error loading stops. Please try again.</div>`;
+        }
+    }
+
+    /* ─── Render Stops ─── */
+    function renderStops() {
+        let html = '<div class="stop-list">';
+        state.stops.forEach((s, i) => {
+            const info = state.stopInfos[i]?.data || {};
+            const active = i === state.selectedIdx ? 'active' : '';
+            html += `
+                <div class="stop-row ${active}" onclick="selectStop(${i})">
+                    <div class="stop-seq">${s.seq}</div>
+                    <div class="stop-info">
+                        <div class="stop-en">${info.name_en || 'Unknown Stop'}</div>
+                        <div class="stop-tc">${info.name_tc || ''}</div>
+                    </div>
+                    <div class="stop-chev">›</div>
+                </div>`;
+        });
+        html += '</div>';
+        $('stopsListContainer').innerHTML = html;
+    }
+
+    /* ─── Select Stop ─── */
+    async function selectStop(idx) {
+        state.selectedIdx = idx;
+        clearTimer();
+        renderStops();
+
+        const info = state.stopInfos[idx]?.data || {};
+        $('etaStopEn').textContent = info.name_en || state.stops[idx].stop;
+        $('etaStopTc').textContent = info.name_tc || '';
+
+        show('etaCard');
+        $('etaCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        await refreshETA();
+        state.etaTimer = setInterval(refreshETA, 30000);
+    }
+
+    /* ─── Fetch & Display ETA ─── */
+    async function refreshETA() {
+        const stop = state.stops[state.selectedIdx];
+        if (!stop) return;
+
+        $('etaList').innerHTML = `
+            <div class="loading-state"><div class="spinner"></div>Fetching arrival times…</div>`;
+        $('etaFooter').textContent = '';
+
+        try {
+            const data = await fetchJSON(`${API}/eta/${stop.stop}/${state.route}/${state.serviceType}`);
+            const all = data.data || [];
+
+            const filtered = all.filter(e => e.dir === state.bound);
+            const pool = (filtered.length ? filtered : all).slice(0, 3);
+            const valid = pool.filter(e => e.eta);
+
+            if (!valid.length) {
+                $('etaList').innerHTML = `
+                    <div class="no-service">
+                        <div class="icon">🚫</div>
+                        No scheduled arrivals at this time.<br>
+                        <small>Service may have ended, or no data is currently available.</small>
+                    </div>`;
+                $('etaFooter').textContent = `Updated: ${new Date().toLocaleTimeString('en-HK')}`;
+                return;
+            }
+
+            const now = new Date();
+            const rankClasses = ['r1', 'r2', 'r3'];
+            const rankLabels = ['1st', '2nd', '3rd'];
+
+            let html = '';
+            valid.forEach((eta, i) => {
+                const dt = new Date(eta.eta);
+                const diffMs = dt - now;
+                const diffMin = Math.round(diffMs / 60000);
+
+                let cdText, cdClass;
+                if (diffMin < 1) {
+                    cdText = 'Arriving'; cdClass = 'arriving';
+                } else if (diffMin <= 5) {
+                    cdText = `${diffMin} min`; cdClass = 'soon';
+                } else {
+                    cdText = `${diffMin} min`; cdClass = 'normal';
+                }
+
+                const timeStr = dt.toLocaleTimeString('en-HK', {
+                    hour: '2-digit', minute: '2-digit', hour12: true
+                });
+                const remark = eta.rmk_en || eta.rmk_tc || '';
+                const rc = rankClasses[i] || 'r3';
+
+                html += `
+                    <div class="eta-row ${rc}">
+                        <div class="eta-rank ${rc}">${rankLabels[i] || i + 1}</div>
+                        <div class="eta-mid">
+                            <div class="eta-time">${timeStr}</div>
+                            ${remark ? `<div class="eta-remark">${remark}</div>` : ''}
+                        </div>
+                        <div class="eta-countdown ${cdClass}">${cdText}</div>
+                    </div>`;
+            });
+
+            $('etaList').innerHTML = html;
+            $('etaFooter').textContent =
+                `⟳ Auto-refreshes every 30s  ·  Last updated: ${now.toLocaleTimeString('en-HK')}`;
+
+        } catch (err) {
+            $('etaList').innerHTML =
+                `<div class="error-state">❌ Could not fetch arrival times. Tap Refresh to try again.</div>`;
+        }
+    }
+</script>
+</body>
+</html>
