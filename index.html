@@ -526,7 +526,33 @@
             .route-od-en { font-size: 0.93em; }
             .stat-val { font-size: 1.2em; }
         }
+    
+        /* ── Map ── */
+        .map-heading {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #475569;
+            margin: 1rem 0 0.5rem;
+        }
+        #kmb-map {
+            height: 340px;
+            border-radius: 0.75rem;
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+            background: #e8edf2;
+        }
+        .map-note {
+            font-size: 0.72rem;
+            color: #94a3b8;
+            margin-top: 0.35rem;
+            text-align: right;
+        }
+
     </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 </head>
 <body>
 
@@ -614,6 +640,13 @@
         <div id="stopsListContainer"></div>
     </div>
 
+    <!-- ── MAP SECTION ── -->
+    <div id="mapSection" class="hidden">
+        <div class="map-heading">🗺️ Bus Stop Locations &nbsp;·&nbsp; 巴士站位置</div>
+        <div id="kmb-map"></div>
+        <p class="map-note">Click a marker to select a stop &nbsp;·&nbsp; 點擊標記以選擇巴士站</p>
+    </div>
+
     <!-- ETA Card -->
     <div class="card hidden" id="etaCard">
         <div class="eta-top">
@@ -637,6 +670,8 @@
     Data may be delayed up to a few minutes &nbsp;·&nbsp; 資料可能稍有延遲 &nbsp;·&nbsp; © 2025 KMB Bus Tracker
 </footer>
 
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
     const API = 'https://data.etabus.gov.hk/v1/transport/kmb';
 
@@ -650,6 +685,65 @@
         selectedIdx: -1,
         etaTimer: null
     };
+
+
+ // ─── Map (Leaflet) ───
+ let map = null;
+ let markersLayer = null;
+
+ function ensureMap() {
+   if (map) return;
+   map = L.map('kmb-map', { zoomControl: true });
+   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+     maxZoom: 19,
+     attribution: '&copy; OpenStreetMap contributors'
+   }).addTo(map);
+   markersLayer = L.layerGroup().addTo(map);
+ }
+
+ function renderMap() {
+   // Requires stopInfos with lat/long
+   if (!state.stopInfos || !state.stopInfos.length) {
+     hide('mapSection');
+     return;
+   }
+   const pts = [];
+   ensureMap();
+   markersLayer.clearLayers();
+
+   state.stops.forEach((s, i) => {
+     const info = state.stopInfos[i]?.data || {};
+     const lat = parseFloat(info.lat);
+     const lng = parseFloat(info.long);
+     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+     pts.push([lat, lng]);
+
+     const labelEn = (info.name_en || 'Stop') + ' (' + s.seq + ')';
+     const labelTc = info.name_tc || '';
+     const isActive = i === state.selectedIdx;
+     const icon = L.divIcon({
+       className: 'kmb-marker',
+       html: `<div style="width:28px;height:28px;border-radius:999px;background:${isActive ? '#d42e12' : '#ffffff'};border:2px solid #d42e12;display:flex;align-items:center;justify-content:center;font-weight:800;color:${isActive ? '#fff' : '#d42e12'};box-shadow:0 2px 10px rgba(0,0,0,0.15);">${s.seq}</div>`,
+       iconSize: [28, 28],
+       iconAnchor: [14, 14]
+     });
+
+     const m = L.marker([lat, lng], { icon }).addTo(markersLayer);
+     m.bindPopup(`<div style="font-weight:700;margin-bottom:2px;">${labelEn}</div><div style="font-size:12px;color:#777;">${labelTc}</div>`);
+     m.on('click', () => selectStop(i));
+   });
+
+   if (pts.length) {
+     show('mapSection');
+     // Leaflet needs size invalidation when container becomes visible
+     setTimeout(() => {
+       map.invalidateSize();
+       map.fitBounds(pts, { padding: [18, 18] });
+     }, 50);
+   } else {
+     hide('mapSection');
+   }
+ }
 
     /* ─── Helpers ─── */
     const $ = id => document.getElementById(id);
@@ -792,6 +886,7 @@
             state.stopInfos = infos;
 
             renderStops();
+     renderMap();
 
         } catch (err) {
             $('stopsListContainer').innerHTML =
@@ -824,6 +919,7 @@
         state.selectedIdx = idx;
         clearTimer();
         renderStops();
+     renderMap();
 
         const info = state.stopInfos[idx]?.data || {};
         $('etaStopEn').textContent = info.name_en || state.stops[idx].stop;
